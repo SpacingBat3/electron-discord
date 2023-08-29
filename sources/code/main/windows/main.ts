@@ -23,6 +23,7 @@ import { getWebCordCSP } from "../modules/csp";
 import L10N from "../../common/modules/l10n";
 import { loadChromiumExtensions, styles } from "../modules/extensions";
 import { commonCatches } from "../modules/error";
+import loadSettingsWindow from "../windows/settings";
 
 import type { PartialRecursive } from "../../common/global";
 import { nativeImage } from "electron/common";
@@ -44,6 +45,8 @@ export default function createMainWindow(flags:MainWindowFlags): BrowserWindow {
 
   // Browser window
 
+  const useCustomBar = appConfig.value.settings.general.custombar.use;
+
   const win = new BrowserWindow({
     title: app.getName(),
     minWidth: appInfo.minWinWidth,
@@ -53,6 +56,7 @@ export default function createMainWindow(flags:MainWindowFlags): BrowserWindow {
     backgroundColor: appInfo.backgroundColor,
     transparent: appConfig.value.settings.general.window.transparent,
     show: false,
+    frame: !useCustomBar,
     webPreferences: {
       preload: resolve(app.getAppPath(), "app/code/renderer/preload/main.js"),
       nodeIntegration: false, // Never set to "true"!
@@ -69,6 +73,51 @@ export default function createMainWindow(flags:MainWindowFlags): BrowserWindow {
     },
     ...(process.platform !== "win32" ? {icon: appInfo.icons.app} : {}),
   });
+  
+  // Custom Bar
+  if (useCustomBar){
+    const custombarView = new BrowserView({
+      webPreferences: {
+        nodeIntegration: false,
+        preload: resolve(app.getAppPath(), "app/code/renderer/preload/custombar.js")
+      }
+    });
+    win.setBrowserView(custombarView);
+    custombarView.setAutoResize({ width: true });
+    custombarView.webContents.loadFile(resolve(app.getAppPath(), "sources/assets/web/html/custombar.html")).then(() => {
+      console.debug("[Custom Bar] Loaded!");
+    }).catch((e) => {
+      console.debug("[Custom Bar] Error loading!");
+      console.debug(e);
+    });
+    custombarView.setBounds({ width: win.getBounds().width, height: 20, x: 0, y: 0 });
+    custombarView.webContents.on("ipc-message", (_event, channel) => {
+      switch (channel) {
+        case "window-minimize":
+          console.debug("[Custom Bar] Minimize window...");
+          win.minimize();
+          break;
+        case "window-maximize":
+          console.debug("[Custom Bar] Maximize window...");
+          if(win.isMaximized())
+            win.unmaximize();
+          else
+            win.maximize();
+          break;
+        case "window-close":
+          console.debug("[Custom Bar] Close window...");
+          win.close();
+          break;
+        case "opensettings":
+          console.debug("[Custom Bar] Opening settings...");
+          loadSettingsWindow(win);
+          break;
+        default:
+          break;
+      }
+    });
+  }
+
   win.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
     if (errorCode <= -100 && errorCode >= -199)
     // Show offline page on connection errors.
@@ -408,6 +457,17 @@ export default function createMainWindow(flags:MainWindowFlags): BrowserWindow {
         .then(buffer => buffer.toString())
         .then(data => win.webContents.insertCSS(data))
         .catch(commonCatches.print);
+
+      if(useCustomBar){
+        styles.load(win.webContents)
+          .catch(commonCatches.print);
+        import("fs")
+          .then(fs => fs.promises.readFile)
+          .then(read => read(resolve(app.getAppPath(), "sources/assets/web/css/discord-custombar.css")))
+          .then(buffer => buffer.toString())
+          .then(data => win.webContents.insertCSS(data))
+          .catch(commonCatches.print);
+      }
       // Additionally, make window transparent if user has opted for it.
       if(appConfig.value.settings.general.window.transparent)
         win.webContents.once("did-stop-loading", () => win.setBackgroundColor("#0000"));

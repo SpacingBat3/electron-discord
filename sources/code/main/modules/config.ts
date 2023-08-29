@@ -61,6 +61,9 @@ const defaultAppConfig = Object.freeze({
       taskbar: {
         flash: true
       },
+      custombar: {
+        use: false
+      },
       window: {
         transparent: false,
         hideOnClose: true

@@ -151,8 +151,8 @@ function generateSettings(optionsGroups: htmlConfig) {
             (Object.keys as keys)(setting).sort().map(key => {
               if(key !== "name" && key !== "description" && key !== "labels" && setting[key] !== undefined) {
                 formContainer.appendChild(createForm({
-                  type:"checkbox",
-                  id: groupId+"."+settingKey+"."+key,
+                  type: "checkbox",
+                  id: groupId + "." + settingKey + "." + key,
                   isChecked: setting[key] === true,
                   label: setting.labels[key] ?? "N/A"
                 }));
